@@ -27,6 +27,8 @@ What else is different on the badge:
 - **Docs links are QR codes.** Open the journal's Lessons tab, pick a lesson and press Select to scan its
   Pomerium docs page with your phone.
 - **The badge has no speaker**, so the game is silent.
+- **Losing all your hearts starts the quest over**, and so does a new game: you go back to being a stranger
+  with no session, no groups, no deed and no lessons.
 
 ## Controls
 
@@ -43,7 +45,8 @@ The game is played with the badge's own buttons, mapped to match the browser gam
 | Open the journal (your quest, your claims, lessons, the access log, start over) | Menu | I                     |
 | Leave the game for the badge's app list        | Home                     | Not in the browser game                   |
 
-The game saves as you play, so you can leave with Home and carry on later.
+The game saves as you play, so you can leave with Home and carry on later. On the title screen, Up and Down
+choose between carrying on and a new game.
 
 ## Installing on your badge
 
