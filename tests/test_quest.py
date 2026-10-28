@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "badge", "pomerium_quest"))
 
-from quest import KNIGHT_QUOTA, Quest  # noqa: E402
+from quest import EMAIL, KNIGHT_QUOTA, Quest, email_for  # noqa: E402
 
 
 def citizen():
@@ -79,6 +79,31 @@ class Progression(unittest.TestCase):
         self.assertEqual(quest.stale(), ["scholars"])
         quest.sign_in()
         self.assertIn("scholars", quest.session["groups"])
+
+
+class WhoYouAre(unittest.TestCase):
+    def test_the_badge_username_makes_the_address(self):
+        self.assertEqual(email_for("Nick Taylor", "nickytonline"), "nickytonline@quest.example")
+
+    def test_a_name_makes_the_address_without_a_username(self):
+        self.assertEqual(email_for("Nick", ""), "nick@quest.example")
+        self.assertEqual(email_for("Mary Jo O'Neil", ""), "mary.jo.oneil@quest.example")
+
+    def test_nothing_usable_falls_back(self):
+        self.assertEqual(email_for("", ""), EMAIL)
+        self.assertEqual(email_for("-- ''", ""), EMAIL)
+
+    def test_signing_in_carries_the_players_address(self):
+        quest = Quest()
+        quest.set_player("Nick")
+        quest.sign_in()
+        self.assertEqual(quest.session["email"], "nick@quest.example")
+
+    def test_the_player_is_saved(self):
+        quest = Quest()
+        quest.set_player("Nick Taylor", "nickytonline")
+        loaded = Quest.from_save(json.loads(json.dumps(quest.to_save())))
+        self.assertEqual((loaded.name, loaded.handle), ("Nick Taylor", "nickytonline"))
 
 
 class Saving(unittest.TestCase):

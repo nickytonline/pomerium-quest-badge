@@ -17,8 +17,12 @@ STAGES = ("anonymous", "newcomer", "invited", "granted", "citizen", "proven", "k
 GROUPS = data.GROUPS
 KNIGHT_QUOTA = data.KNIGHT_QUOTA
 
-#: The player's address at the Oracle.
+#: The player's address at the Oracle, until they have a name: see email_for.
 EMAIL = "you@quest.example"
+EMAIL_DOMAIN = "quest.example"
+
+#: The longest first name the name screen takes.
+NAME_MAX = 16
 
 #: The id of the player's house, which the Oracle's deed claim names.
 HOUSE_ID = "house-1"
@@ -49,6 +53,15 @@ EVENTS = {
 }
 
 
+def email_for(name, handle):
+    """The player's address at the Oracle: their GitHub username if the badge has one, or else their name,
+    lowercased with dots for spaces, as in nick.taylor@quest.example."""
+    local = handle or ".".join(name.lower().split())
+    local = "".join(char for char in local.lower() if char.isalpha() or char.isdigit() or char in ".-_")
+
+    return local + "@" + EMAIL_DOMAIN if local.strip(".-_") else EMAIL
+
+
 def fresh_progress():
     return {
         "books_read": [],
@@ -73,6 +86,10 @@ class Quest:
         self.hp = MAX_HP
         self.progress = fresh_progress()
         self.log = []
+        # Who the player is, which outlasts starting over: a name to greet them by, and the GitHub
+        # username the badge's Settings saved, if any.
+        self.name = ""
+        self.handle = ""
         self.dirty = False
 
     # Progression
@@ -130,7 +147,7 @@ class Quest:
     def sign_in(self):
         """The Oracle signs the player in: the new session carries everything he lists for them now."""
         groups = self.oracle_groups()
-        self.session = ppl.identity(True, EMAIL, groups, self.oracle_deed())
+        self.session = ppl.identity(True, self.email(), groups, self.oracle_deed())
         move = SIGN_IN.get(self.stage)
         target = move(groups) if move else None
 
@@ -138,6 +155,14 @@ class Quest:
             self.stage = target
 
         self.settle()
+
+    def email(self):
+        return email_for(self.name, self.handle)
+
+    def set_player(self, name, handle=""):
+        self.name = name.strip()
+        self.handle = handle.strip()
+        self.dirty = True
 
     def has_steel(self):
         return self.stage == "armed"
@@ -178,6 +203,7 @@ class Quest:
             "hp": self.hp,
             "progress": self.progress,
             "log": self.log,
+            "player": {"name": self.name, "handle": self.handle},
         }
 
     @classmethod
@@ -199,5 +225,8 @@ class Quest:
         quest.hp = saved.get("hp", MAX_HP) or MAX_HP
         quest.progress.update(saved.get("progress") or {})
         quest.log = saved.get("log") or []
+        player = saved.get("player") or {}
+        quest.name = player.get("name", "")
+        quest.handle = player.get("handle", "")
 
         return quest
