@@ -20,19 +20,31 @@ it:
 The policies, claims and rules the game teaches are the same ones the browser game uses, and they're true of
 open-source Pomerium. Only who evaluates them changes.
 
+What else is different on the badge:
+
+- **Your house's door rules are chosen, not typed.** Each letter on your desk offers three door policies,
+  shown as the YAML Pomerium would read. Pick one, and the letter's visitors try the door against it.
+- **Docs links are QR codes.** Open the journal's Lessons tab, pick a lesson and press Select to scan its
+  Pomerium docs page with your phone.
+- **The badge has no speaker**, so the game is silent.
+- **The traveler stays put** instead of wandering to your house and eating your bread.
+
 ## Controls
 
 The game is played with the badge's own buttons, mapped to match the browser game:
 
-| Action                                      | On the badge                    | In the browser game                       |
-| ------------------------------------------- | ------------------------------- | ----------------------------------------- |
-| Move                                        | Up, Down, Left and Right        | The arrow keys, or the W, A, S and D keys |
-| Talk, read a sign, open a chest or a gate   | Select                          | E or Enter                                |
-| Show the next line of what someone says     | Select                          | E or Enter                                |
-| Swing your sword                            | Back                            | Space or J                                |
-| Close a sign, a conversation or a denial    | Back                            | Esc                                       |
-| Open the menu (journal, save, sound)        | Menu                            | Esc, or I for the journal                 |
-| Leave the game for the badge's app list     | Home                            | Not in the browser game                   |
+| Action                                         | On the badge             | In the browser game                       |
+| ---------------------------------------------- | ------------------------ | ----------------------------------------- |
+| Move                                           | Up, Down, Left and Right | The arrow keys, or the W, A, S and D keys |
+| Talk, read a sign, open a chest or knock       | Select                   | E or Enter                                |
+| Go on to the next page of a sign or a talk     | Select or Back           | E or Enter                                |
+| Swing your sword                               | Back                     | Space or J                                |
+| Close a denial screen or the journal           | Back                     | Esc                                       |
+| Pick an answer, or compare door rules          | Up and Down, Left and Right, then Select | Click                  |
+| Open the journal (your quest, your claims, lessons, the access log, start over) | Menu | I                     |
+| Leave the game for the badge's app list        | Home                     | Not in the browser game                   |
+
+The game saves as you play, so you can leave with Home and carry on later.
 
 ## Installing on your badge
 
@@ -47,6 +59,29 @@ The badge only lets a computer write apps while it's in USB disk mode, so the sc
 mode, copies the game, puts Pomerium Quest second in the badge's app list, and ejects the drive. Press the
 badge's reset button if it doesn't restart on its own, then pick Pomerium Quest. [AGENTS.md](AGENTS.md) has
 the details, including how to start the quest over.
+
+## How it fits together
+
+| Path                          | What it is                                                                         |
+| ----------------------------- | ---------------------------------------------------------------------------------- |
+| `badge/pomerium_quest/`       | The app the badge runs                                                             |
+| `.../data.py` and `assets/`   | Generated from Pomerium Quest: zones, signs, books, letters, the map, sprite sheets |
+| `.../ppl.py`                  | The policy evaluator, standing in for Pomerium                                     |
+| `.../quest.py`                | Quest stages and saving, with the badge playing the identity provider               |
+| `.../story.py`, `house.py`    | What everyone says, and what happens at each gate and at your door                  |
+| `.../game.py`, `ui.py`        | The overworld and everything drawn over it                                          |
+| `scripts/generate.mjs`        | Regenerates the data from a Pomerium Quest checkout next to this one               |
+| `scripts/play.py`             | Plays the game on a connected badge with scripted presses and takes a screenshot   |
+| `tests/`                      | Unit tests, plus a full playthrough that runs on the badge                         |
+
+```sh
+node scripts/generate.mjs                  # after the browser game's zones, map or words change
+python3 -m unittest discover -s tests      # unit tests, on this computer
+python3 scripts/play.py --fresh --setup "$(cat tests/badge_playthrough.py)"   # the whole quest, on the badge
+```
+
+The generator also saves the browser game's own policy decisions as test fixtures, and the tests check the
+badge's evaluator makes every one of them the same way.
 
 ## License
 
