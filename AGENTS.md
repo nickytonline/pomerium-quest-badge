@@ -97,8 +97,9 @@ Other things to know:
   `APP_ORDER` (or copy the backup back).
 - **A firmware update** may replace the launcher and drop the game from `APP_ORDER`. Run the install again.
 - Leave every other file in `/system` and `/state` alone: they belong to the launcher and the badge's other
-  apps. **`secrets.py`** holds the owner's Wi-Fi details, and the game doesn't need Wi-Fi, so never read,
-  print or copy it.
+  apps. **`secrets.py`** holds the owner's Wi-Fi details, so never open, print or copy it. The game reads
+  just two of its settings, `CONTACT_NAME` and `GITHUB_USERNAME`, by name (`badge_owner` in `game.py`), the
+  way the badge's own app does, so the Oracle knows who the player is. Read nothing else from it.
 - **Every `mpremote` command interrupts whatever the badge is running** and leaves it at the REPL, so its
   screen goes dark. When you're done with it, `mpremote connect <port> exec "import machine; machine.reset()"`
   restarts it into the launcher.

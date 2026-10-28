@@ -12,7 +12,7 @@ it:
 
 | Browser game                                   | Badge                                                                     |
 | ---------------------------------------------- | ------------------------------------------------------------------------- |
-| Keycloak signs you in                          | The Oracle signs you in on the badge                                      |
+| Keycloak signs you in                          | The Oracle signs you in on the badge, as the person in the badge's Settings |
 | The Oracle adds you to groups in Keycloak      | The Oracle adds you to groups in your saved identity on the badge         |
 | Pomerium evaluates each gate's policy          | A port of the game's policy evaluator checks the same policy on the badge |
 | Policies live in `zones.ts`                    | Generated from the same `zones.ts`, so they can't drift                   |
@@ -26,6 +26,8 @@ What else is different on the badge:
   shown as the YAML Pomerium would read. Pick one, and the letter's visitors try the door against it.
 - **Docs links are QR codes.** Open the journal's Lessons tab, pick a lesson and press Select to scan its
   Pomerium docs page with your phone.
+- **You sign in as yourself.** The Oracle uses the name and GitHub username saved in your badge's Settings.
+  If there are none, the game asks your first name once, and keeps it when the quest starts over.
 - **The badge has no speaker**, so the game is silent.
 - **Losing all your hearts starts the quest over**, and so does a new game: you go back to being a stranger
   with no session, no groups, no deed and no lessons.
