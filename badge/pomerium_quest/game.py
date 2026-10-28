@@ -3,10 +3,12 @@
 # buttons, so a script can play it too (see scripts/play.py).
 
 import json
+import math
 import random
 
 import data
 import house
+import household
 import story
 import ui
 from quest import MAX_HP, Quest
@@ -75,6 +77,89 @@ BUTTONS = {
     "menu": BUTTON_MENU,
     "home": BUTTON_HOME,
 }
+
+
+#: A wet dog's shake: a beat after climbing out, this many quick swings, each up to `reach` pixels.
+SHAKE_DELAY_MS = 250
+SHAKE_SWINGS = 9
+SHAKE_SWING_MS = 55
+SHAKE_REACH = 2
+
+#: The steel sword rises out of the chest, and later rises away.
+ITEM_RISE_MS = 420
+ITEM_FADE_MS = 300
+
+#: Crumbs in the loaf's colors, as rows of pens (None is see-through); and a bite on its way to a mouth.
+CRUST = color.rgb(138, 90, 36)
+CRUMB = color.rgb(201, 138, 60)
+INSIDE = color.rgb(227, 176, 106)
+CRUMBS = (
+    ((INSIDE, CRUMB), (CRUMB, CRUST)),
+    ((INSIDE,), (CRUMB,)),
+    ((CRUMB, INSIDE),),
+    ((None, INSIDE), (CRUMB, CRUST)),
+    ((CRUMB,),),
+)
+MORSEL = (
+    (None, CRUST, CRUST, None),
+    (CRUST, INSIDE, INSIDE, CRUMB),
+    (CRUST, INSIDE, CRUMB, CRUMB),
+    (None, CRUMB, CRUST, None),
+)
+CRUMB_LINGER_MS = 4000
+
+DROPLETS = (color.rgb(255, 255, 255), color.rgb(191, 227, 255), color.rgb(93, 155, 224), color.rgb(93, 155, 224))
+ROCK_CHIPS = (
+    color.rgb(154, 156, 166),
+    color.rgb(123, 125, 134),
+    color.rgb(86, 88, 98),
+    color.rgb(195, 197, 205),
+)
+
+
+class Bit:
+    """A few pixels flung through the air: up by `lift`, then down `fall` below where they started, `dx` across.
+    Crumbs and bites move in `steps` jerky steps, like a sprite on old hardware, then `linger` where they land."""
+
+    def __init__(self, born, ms, x, y, dx, fall, lift, shape, linger=0, steps=0, blink=False):
+        self.born = born
+        self.ms = ms
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.fall = fall
+        self.lift = lift
+        # A single pen is one pixel; otherwise rows of pens.
+        self.shape = shape if isinstance(shape[0], (list, tuple)) else (tuple(shape),)
+        self.linger = linger
+        self.steps = steps
+        self.blink = blink
+
+    def done(self, now):
+        return now - self.born >= self.ms + self.linger
+
+    def on_floor(self, now):
+        return self.blink and now - self.born >= self.ms
+
+    def draw(self, now, cx, cy):
+        age = now - self.born
+        t = min(1, age / self.ms)
+
+        if self.steps:
+            t = round(t * self.steps) / self.steps
+
+        # Blink out over the last few hundred milliseconds of lying on the floor.
+        if self.blink and self.ms + self.linger - age < 630 and (age // 90) % 2:
+            return
+
+        x = int(self.x + self.dx * t) - cx
+        y = int(self.y + self.fall * ((1 + self.lift) * t * t - self.lift * t)) - cy
+
+        for row, pens in enumerate(self.shape):
+            for col, pen in enumerate(pens):
+                if pen is not None:
+                    screen.pen = pen
+                    screen.rectangle(x + col, y + row, 1, 1)
 
 
 def sheet(name, frames):
@@ -146,6 +231,9 @@ class Sprite:
         self.next_move = 0
         self.hp = BOT_HP
         self.flash_until = 0
+        # Pixels drawn above its tile, for a bob; and whether a guard is holding it where it stands.
+        self.lift = 0
+        self.held = False
 
     def move(self, x, y, now, glide_ms=STEP_MS):
         self.from_x, self.from_y = self.x, self.y
@@ -162,7 +250,7 @@ class Sprite:
 
         return (
             (self.from_x + (self.x - self.from_x) * progress) * T,
-            (self.from_y + (self.y - self.from_y) * progress) * T,
+            (self.from_y + (self.y - self.from_y) * progress) * T - self.lift,
         )
 
 
@@ -404,6 +492,196 @@ class Title:
         ui.centred("Home: back to the badge menu", 206, ui.MUTED)
 
 
+#: The sky's sparks, in the game's sunset palette.
+SPARKS = (
+    color.rgb(255, 216, 107),
+    color.rgb(255, 154, 90),
+    color.rgb(255, 79, 184),
+    color.rgb(63, 227, 242),
+    color.rgb(198, 244, 50),
+    color.rgb(243, 236, 255),
+)
+
+#: How long rockets keep launching; the show then fades out.
+FIREWORKS_MS = 10000
+
+#: Who played whom: a name, a role, and the sheet and frame of their sprite.
+CAST = (
+    ("You, the Pomerium Pomeranian", "the user", "dog", 0),
+    ("The Oracle", "your identity provider", "npcs", data.NPC_FRAME["oracle"]),
+    ("The Sage", "your guide to zero trust", "npcs", data.NPC_FRAME["sage"]),
+    ("The Traveler", "a signed-in user the policy turns away", "npcs", data.NPC_FRAME["traveler"]),
+    ("The Baker", "a user the same policy lets in", "npcs", data.NPC_FRAME["baker"]),
+    ("The Captain", "the admin who adds you to the knights group", "npcs", data.NPC_FRAME["captain"]),
+    ("The Librarian", "the admin who adds you to the scholars group", "npcs", data.NPC_FRAME["librarian"]),
+    ("The Armorer", "an app behind a route, leaving access to Pomerium", "npcs", data.NPC_FRAME["armorer"]),
+    ("Bot slimes", "automated bots hammering every gate", "items", BOT_FRAME),
+    ("Phish", "phishing: a fake Oracle after your sign-in", "npcs", data.PHISH_FRAME),
+)
+
+#: Each line of the credits is this many pixels tall, and they scroll up this many pixels a second.
+CREDIT_H = 24
+CREDITS_PX_PER_S = 14
+
+
+class Celebration:
+    """The end of the quest: fireworks over the kingdom, the Pomeranian, and the cast, each with the part
+    they played in Pomerium."""
+
+    def __init__(self, game):
+        self.full = True
+        self.selected = 0
+        self.opened = game.now
+        self.rockets = []
+        self.sparks = []
+        self.next_rocket = game.now
+        self.stats = "%d bot slimes defeated : %d lessons learned" % (
+            game.quest.defeated,
+            len(game.quest.progress["lessons"]),
+        )
+
+    def handle(self, game, pressed):
+        if "up" in pressed or "down" in pressed:
+            self.selected = 1 - self.selected
+
+        if "select" in pressed:
+            game.close(self, game.start_over if self.selected else None)
+        elif "back" in pressed:
+            game.close(self)
+
+    def sky(self, now):
+        """Rockets rise, burst into a ring of sparks or now and then a heart, and the sparks fall and fade."""
+        if now - self.opened < FIREWORKS_MS and now >= self.next_rocket:
+            self.next_rocket = now + random.randint(250, 700)
+            self.rockets.append(
+                [random.randint(30, ui.WIDTH - 30), ui.HEIGHT, -random.uniform(3.5, 4.5), random.randint(40, 110),
+                 random.choice(SPARKS), random.random() < 0.2]
+            )
+
+        for rocket in list(self.rockets):
+            rocket[1] += rocket[2]
+
+            if rocket[1] <= rocket[3]:
+                self.rockets.remove(rocket)
+                self.burst(rocket[0], rocket[1], rocket[4], rocket[5])
+            else:
+                screen.pen = rocket[4]
+                screen.rectangle(rocket[0], int(rocket[1]), 2, 3)
+
+        for spark in list(self.sparks):
+            spark[0] += spark[2]
+            spark[1] += spark[3]
+            spark[3] += 0.05
+            spark[4] -= 1
+
+            if spark[4] <= 0:
+                self.sparks.remove(spark)
+            elif spark[4] > 6 or spark[4] % 2:
+                screen.pen = spark[5]
+                screen.rectangle(int(spark[0]), int(spark[1]), 2, 2)
+
+    def burst(self, x, y, pen, heart):
+        count = 24 if heart else 18
+
+        for index in range(count):
+            t = index / count * math.pi * 2
+
+            if heart:
+                # The classic heart curve, scaled down to a spark's speed.
+                vx = 16 * math.sin(t) ** 3 * 0.1
+                vy = -(13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)) * 0.1
+            else:
+                speed = random.uniform(1.1, 1.9)
+                vx = math.cos(t) * speed
+                vy = math.sin(t) * speed
+
+            self.sparks.append([x, y, vx, vy, random.randint(28, 40), pen])
+
+    def draw(self, game, now):
+        self.sky(now)
+        dog = game.dog[DOG_FRAME["down"] + (now // 300) % 3]
+        screen.blit(dog, rect(0, 0, T, T), rect(ui.WIDTH // 2 - 16, 4, 32, 32))
+        ui.centred("The kingdom is secure!", 40, ui.SUN, ui.TITLE)
+        ui.centred("Every guard checked you, every time.", 60, ui.MUTED)
+        ui.centred(self.stats, 74, ui.LIME)
+        self.credits(game, now, 92, 180)
+        labels = ("Back to the kingdom", "Play again")
+
+        for index, label in enumerate(labels):
+            y = 192 + index * 16
+            pen = ui.LIME if index == self.selected else ui.TEXT
+
+            if index == self.selected:
+                screen.pen = ui.LIME
+                screen.triangle(96, y + 1, 102, y + 5, 96, y + 9)
+
+            ui.text(label, 108, y, pen)
+
+        ui.centred("Up/Down: choose   Select: go", ui.HEIGHT - 12, ui.MUTED)
+
+    def credits(self, game, now, top, bottom):
+        """The cast scrolls up through a window, looping without a seam."""
+        lines = len(CAST) + 3
+        loop = lines * CREDIT_H
+        offset = ((now - self.opened) * CREDITS_PX_PER_S // 1000) % loop
+        sheets = {"dog": game.dog, "npcs": game.npc_frames, "items": game.items}
+
+        for copy in (0, 1):
+            for index in range(lines):
+                y = top + copy * loop + index * CREDIT_H - offset
+
+                if y < top or y + CREDIT_H > bottom:
+                    continue
+
+                if index == 0:
+                    ui.centred("Starring", y + 4, ui.SUN)
+                elif index <= len(CAST):
+                    name, role, sheet_name, frame = CAST[index - 1]
+                    screen.blit(sheets[sheet_name][frame], vec2(40, y + 2))
+                    ui.text(name, 62, y, ui.TEXT)
+                    ui.text("as " + role, 62, y + 11, ui.MUTED)
+                elif index == len(CAST) + 1:
+                    ui.centred("And Pomerium", y + 4, ui.SUN)
+                else:
+                    ui.centred("as every guard in the kingdom", y, ui.MUTED)
+
+
+class Phished:
+    """The way to lose: the phish grins, the quest is over, and the only way on is to start again. The last
+    page is the docs, as a QR code."""
+
+    def __init__(self):
+        self.full = True
+        self.page = 0
+
+    def handle(self, game, pressed):
+        if "select" not in pressed:
+            return
+
+        if self.page < len(story.PHISHED):
+            self.page += 1
+        else:
+            game.close(self, game.start_over)
+
+    def draw(self, game, now):
+        if self.page == len(story.PHISHED):
+            lesson = data.LESSONS["idp"]
+            ui.panel("Docs: " + ui.plain(lesson["title"]))
+            draw_qr(lesson["link"]["href"])
+            ui.centred(lesson["link"]["label"], ui.HEIGHT - 36, ui.MUTED)
+            ui.centred("Scan to read the docs. Select: start over", ui.HEIGHT - 22, ui.LIME)
+
+            return
+
+        bob = 2 if (now // 500) % 2 else 0
+        phish = game.npc_frames[data.PHISH_FRAME]
+        screen.blit(phish, rect(0, 0, T, T), rect(ui.WIDTH // 2 - 24, 6 + bob, 48, 48))
+        ui.centred("You were phished!", 60, ui.PINK, ui.TITLE)
+        ui.centred("That wasn't the Oracle.", 80, ui.SUN)
+        ui.paragraph(story.PHISHED[self.page]["text"], 100)
+        ui.centred("Select: go on", ui.HEIGHT - 14, ui.LIME)
+
+
 def draw_qr(url):
     """The docs link as a QR code, on a white square so phones can read it."""
     code = screen.qr(url)
@@ -526,7 +804,6 @@ class Game:
         if quest.has_steel():
             self.tiles[data.CHEST["y"]][data.CHEST["x"]] = TILE["chestOpen"]
 
-        self.sync_house_tiles()
         pos = quest.progress["pos"] or [data.SPAWN["x"], data.SPAWN["y"]]
         self.player = Sprite(pos[0], pos[1])
         self.dir = quest.progress["dir"] or "down"
@@ -574,16 +851,17 @@ class Game:
 
         self.slime_knocked_at = -SLIME_KNOCK_MS
         self.fountain_frame = 0
+        # Walks that take many frames, such as a guard leading someone out: see run_jobs.
+        self.jobs = []
+        # Crumbs, droplets and rock chips: see Bit.
+        self.bits = []
+        self.shown_item = None
+        self.shake_at = None
+        self.shake_swing = -1
+        self.shake_dx = 0
+        self.household = household.Household(self)
+        self.household.dress()
         self.draw_board()
-
-    def sync_house_tiles(self):
-        """The door opens once the Oracle grants the deed; a letter waiting shows on the desk."""
-        door = HOUSE["door"]
-        desk = HOUSE["desk"]
-        owned = house.stage(self.quest) != "unowned"
-        self.set_tile(door["x"], door["y"], TILE["door"] if owned else TILE["doorLocked"], False)
-        letter = house.current_letter(self.quest)[1]
-        self.set_tile(desk["x"], desk["y"], TILE["deskLetter"] if letter else TILE["desk"], False)
 
     def tile(self, x, y):
         if 0 <= x < MAP_W and 0 <= y < MAP_H:
@@ -665,7 +943,12 @@ class Game:
 
         oracle = self.visiting_oracle
 
-        return bool(oracle and (oracle.x, oracle.y) == (x, y))
+        if oracle and (oracle.x, oracle.y) == (x, y):
+            return True
+
+        guard = getattr(self, "household", None) and self.household.guard
+
+        return bool(guard and (guard.x, guard.y) == (x, y))
 
     def find(self, group, x, y):
         for sprite in group:
@@ -692,7 +975,7 @@ class Game:
         if self.overlay is None and self.queue:
             self.overlay = self.queue.pop(0)
 
-        self.sync_house_tiles_if_changed()
+        self.household.dress()
 
     def say(self, pages, then=None):
         self.show(Pages(pages, then))
@@ -726,26 +1009,64 @@ class Game:
                 return
 
     def finale(self):
-        self.say(story.FINALE)
+        self.say(story.FINALE, lambda: self.show(Celebration(self)))
 
     def phished(self):
-        self.say(story.PHISHED, self.start_over)
+        self.show(Phished())
+
+    def rules_saved(self):
+        self.household.rules_saved()
+
+    def start(self, job):
+        """Runs a generator a step at a time; each step yields how many milliseconds to wait."""
+        self.jobs.append([job, self.now])
+
+    def run_jobs(self, now):
+        for job in list(self.jobs):
+            if now < job[1]:
+                continue
+
+            try:
+                job[1] = now + (next(job[0]) or 0)
+            except StopIteration:
+                self.jobs.remove(job)
+
+    def make_sprite(self, x, y, frame):
+        return Sprite(x, y, frame)
+
+    def teleport(self, sprite, to):
+        sprite.x, sprite.y = to
+        sprite.from_x, sprite.from_y = to
+        sprite.moved_at = -10000
+
+    def can_see(self, x, y):
+        """Whether a tile is on screen."""
+        cx, cy = self.camera()
+
+        return cx - T < x * T < cx + ui.WIDTH and cy - T < y * T < cy + ui.HEIGHT
+
+    def take_bite(self, table, mouth, lift_ms, chew_ms):
+        """A bite lifts off the loaf to the traveler's mouth, and is chewed out of sight."""
+        x0, y0 = table[0] * T + T // 2 - 2, table[1] * T + T // 2 - 5
+        x1, y1 = mouth[0] * T + T // 2 - 2, mouth[1] * T + T // 2
+        # A lift of -1 makes the path a straight line.
+        self.bits.append(Bit(self.now, lift_ms, x0, y0, x1 - x0, y1 - y0, -1, MORSEL, linger=chew_ms, steps=5))
+
+    def drop_crumb(self, at):
+        """A crumb hops out of the traveler's mouth, falls in jerky steps, lies a while, then blinks out."""
+        x = at[0] * T + T // 2 + random.randint(-2, 2)
+        y = at[1] * T + T // 2 - 3
+        dx = random.randint(-6, 6)
+        fall = random.randint(8, 10)
+        lift = 0.3 + random.random() * 0.5
+        shape = random.choice(CRUMBS)
+        linger = CRUMB_LINGER_MS + random.randint(0, 1000)
+        self.bits.append(Bit(self.now, random.randint(240, 320), x, y, dx, fall, lift, shape, linger, 5, True))
 
     def begin(self):
         if self.quest.progress["pos"] is None:
             self.quest.update(pos=[self.player.x, self.player.y])
             self.say(story.INTRO)
-
-    def sync_house_tiles_if_changed(self):
-        door = HOUSE["door"]
-        desk = HOUSE["desk"]
-        before = (self.tiles[door["y"]][door["x"]], self.tiles[desk["y"]][desk["x"]])
-        self.sync_house_tiles()
-        after = (self.tiles[door["y"]][door["x"]], self.tiles[desk["y"]][desk["x"]])
-
-        if before != after:
-            self.draw_tile(door["x"], door["y"])
-            self.draw_tile(desk["x"], desk["y"])
 
     # Playing
 
@@ -757,6 +1078,18 @@ class Game:
     def update(self, pressed, held, now):
         self.now = now
         self.animate_fountain()
+        self.run_jobs(now)
+        self.household.tick(now, self.overlay is not None)
+        self.shake_off(now)
+
+        if self.shown_item and not self.overlay:
+            # Once the chest's dialog has been read, the item rises away and fades.
+            frame, x, y, at = self.shown_item
+
+            if at > 0:
+                self.shown_item = (frame, x, y, -now)
+            elif now + at > ITEM_FADE_MS:
+                self.shown_item = None
 
         if self.overlay:
             if pressed:
@@ -802,6 +1135,11 @@ class Game:
         x, y = self.front()
 
         if self.find(self.npcs, x, y) or self.find(self.phish, x, y):
+            return
+
+        guard = self.household.guard
+
+        if guard and (guard.x, guard.y) == (x, y):
             return
 
         oracle = self.visiting_oracle
@@ -863,7 +1201,7 @@ class Game:
 
                 return
 
-        if tile in PLAYER_TERRAIN or tile == TILE["gateOpen"]:
+        if tile in PLAYER_TERRAIN or tile in (TILE["gateOpen"], TILE["doorClosed"]):
             self.walk(x, y)
 
     def hint(self, text):
@@ -871,7 +1209,13 @@ class Game:
             self.toast(text)
 
     def walk(self, x, y):
+        left_water = self.tile(self.player.x, self.player.y) == TILE["water"] and self.tile(x, y) != TILE["water"]
         self.player.move(x, y, self.now)
+
+        if left_water:
+            self.shake_at = self.now + STEP_MS + SHAKE_DELAY_MS
+            self.shake_swing = -1
+
         self.arrive()
 
     def arrive(self):
@@ -895,6 +1239,12 @@ class Game:
     def came_home(self):
         if self.quest.progress["house_rules"] is None:
             story.learn(self, "publicRoute")
+
+            # A public house has a slime in it already: one walked in with no session at all.
+            has_slime = any(monster.home == "house" for monster in self.monsters)
+
+            if not has_slime and house.knock(self.quest, "slime"):
+                self.let_slime_in()
 
         letter = house.current_letter(self.quest)[1]
 
@@ -981,6 +1331,8 @@ class Game:
 
         if tile == TILE["chest"] and story.open_chest(self):
             self.set_tile(x, y, TILE["chestOpen"])
+            # The item rises out of the chest and hovers there while its dialog is open.
+            self.shown_item = (SWORD_STEEL, x, y, self.now)
         elif tile == TILE["shelf"]:
             story.read_book(self, x)
         elif is_fountain(tile):
@@ -991,8 +1343,8 @@ class Game:
             story.read_workbench(self)
         elif tile in (TILE["desk"], TILE["deskLetter"]):
             house.use_desk(self)
-        elif tile == TILE["tableBread"]:
-            house.read_table(self)
+        elif tile in household.LOAF:
+            house.read_table(self, self.household.bread, household.WHOLE_LOAF)
         elif tile == TILE["doorLocked"]:
             self.hint("Locked. The sage in Hearth Village knows who holds the deed to this house.")
 
@@ -1020,8 +1372,67 @@ class Game:
             return
 
         self.set_tile(x, y, TILE["cobble"])
+        self.shatter_rock(x, y)
         self.quest.update(broken_rocks=self.quest.progress["broken_rocks"] + [[x, y]])
         self.toast("The steel sword splits the rock.")
+
+    def shatter_rock(self, x, y):
+        """Bursts a broken rock into chunks that arc outward and fall."""
+        pieces = 5
+
+        for index in range(pieces):
+            angle = -math.pi / 2 + (index - (pieces - 1) / 2) * 0.75 + random.uniform(-0.2, 0.2)
+            size = random.randint(3, 5)
+            px = x * T + T // 2 + random.randint(-3, 3)
+            py = y * T + T // 2 + random.randint(-2, 2)
+            dx = int(math.cos(angle) * random.randint(10, 16))
+            pen = ROCK_CHIPS[index % len(ROCK_CHIPS)]
+            shape = tuple((pen,) * size for _ in range(size))
+            self.bits.append(Bit(self.now, random.randint(350, 450), px, py, dx, 6, random.uniform(3, 6), shape))
+
+    def shake_off(self, now):
+        """A wet dog's shake: a fast side-to-side twist that builds and fades, flinging droplets each swing."""
+        self.shake_dx = 0
+
+        if self.shake_at is None or now < self.shake_at:
+            return
+
+        swing = (now - self.shake_at) // SHAKE_SWING_MS
+        player = self.player
+
+        if swing >= SHAKE_SWINGS or self.tile(player.x, player.y) == TILE["water"] or player.moving(now):
+            self.shake_at = None
+
+            return
+
+        side = 1 if swing % 2 == 0 else -1
+        # Strongest in the middle of the shake, gentle at the start and end.
+        strength = math.sin((swing + 1) / (SHAKE_SWINGS + 1) * math.pi)
+        self.shake_dx = side * round(SHAKE_REACH * strength)
+
+        if swing != self.shake_swing:
+            self.shake_swing = swing
+            self.fling_droplets(side, strength)
+
+    def fling_droplets(self, side, strength):
+        px, py = self.player.pixel(self.now)
+
+        for _ in range(2 + round(strength * 3)):
+            x = int(px) + T // 2 + side * random.randint(2, 5)
+            y = int(py) + T // 2 + random.randint(-5, 3)
+            dx = int(side * random.uniform(6, 16) * (0.5 + strength))
+            pen = random.choice(DROPLETS)
+            self.bits.append(Bit(self.now, random.randint(260, 380), x, y, dx, random.randint(4, 8), random.uniform(0.6, 1.4), [pen]))
+
+    def let_slime_in(self):
+        """A slime the door let in appears just inside it, and stays in the house."""
+        for x, y in SLIME_IN:
+            if not self.occupied(x, y) and (x, y) != (self.player.x, self.player.y):
+                monster = Sprite(x, y, BOT_FRAME)
+                monster.home = "house"
+                self.monsters.append(monster)
+
+                return
 
     def hit_monster(self, monster, damage):
         monster.hp -= damage
@@ -1067,7 +1478,7 @@ class Game:
             return
 
         for monster in self.monsters:
-            if monster.moving(now) or now < monster.next_move:
+            if monster.held or monster.moving(now) or now < monster.next_move:
                 continue
 
             monster.next_move = now + 600 + random.randint(0, 700)
@@ -1109,11 +1520,8 @@ class Game:
         near = abs(self.player.x - door["x"]) + abs(self.player.y - door["y"]) <= 6
 
         if house.knock(self.quest, "slime"):
-            for x, y in SLIME_IN:
-                if not self.occupied(x, y) and (x, y) != (self.player.x, self.player.y):
-                    monster.move(x, y, self.now, 1)
-                    monster.home = "house"
-                    break
+            self.monsters.remove(monster)
+            self.let_slime_in()
 
             if near or in_house(self.player.x, self.player.y):
                 self.toast("A slime squeezes in through your public door.", "deny")
@@ -1208,6 +1616,7 @@ class Game:
         if self.open_gate:
             self.close_gate()
 
+        self.shake_at = None
         self.player = Sprite(data.SPAWN["x"], data.SPAWN["y"])
         self.quest.set_hp(MAX_HP)
         self.toast(message)
@@ -1244,6 +1653,7 @@ class Game:
         cx, cy = self.camera()
         screen.blit(self.board.window(cx, cy, ui.WIDTH, ui.HEIGHT), vec2(0, 0))
         wobble = (now // 400) % 2
+        self.draw_bits(cx, cy, True)
 
         for npc in self.npcs:
             self.blit(self.npc_frames[npc.frame], npc, cx, cy)
@@ -1257,6 +1667,9 @@ class Game:
         if self.visiting_oracle:
             self.blit(self.npc_frames[self.visiting_oracle.frame], self.visiting_oracle, cx, cy)
 
+        if self.household.guard:
+            self.blit(self.npc_frames[data.GUARD_FRAME], self.household.guard, cx, cy)
+
         for fish in self.fish:
             self.blit(self.items[FISH_FRAME + wobble], fish, cx, cy)
 
@@ -1265,6 +1678,8 @@ class Game:
                 self.blit(self.items[BOT_FRAME + wobble], monster, cx, cy)
 
         self.draw_player(cx, cy)
+        self.draw_bits(cx, cy, False)
+        self.draw_item(cx, cy)
         ui.hud(self.quest.hp, MAX_HP, region_at(self.player.x, self.player.y))
         self.draw_toast(now)
 
@@ -1286,13 +1701,38 @@ class Game:
             return
 
         swimming = self.tile(player.x, player.y) == TILE["water"]
-        self.blit(self.dog[frame], player, cx, cy, SWIM_DEPTH if swimming else None)
+        self.blit(self.dog[frame], player, cx - self.shake_dx, cy, SWIM_DEPTH if swimming else None)
 
         if now - self.swing_at < SWING_MS:
             dx, dy = STEP[self.dir]
             px, py = player.pixel(now)
             sword = self.swords[SWORD_STEEL if self.quest.has_steel() else SWORD_WOOD][self.dir]
             screen.blit(sword, vec2(int(px) - cx + dx * 11, int(py) - cy + dy * 11))
+
+    def draw_bits(self, cx, cy, on_floor):
+        now = self.now
+
+        for bit in list(self.bits):
+            if bit.done(now):
+                self.bits.remove(bit)
+            elif bit.on_floor(now) == on_floor:
+                bit.draw(now, cx, cy)
+
+    def draw_item(self, cx, cy):
+        """The "item get" moment: the item rises out of the chest and hovers, then rises away."""
+        if not self.shown_item:
+            return
+
+        frame, x, y, at = self.shown_item
+
+        if at > 0:
+            t = min(1, (self.now - at) / ITEM_RISE_MS)
+            # Overshoots a little, then settles.
+            rise = 2 + 16 * (1 + 2.7 * (t - 1) ** 3 + 1.7 * (t - 1) ** 2)
+        else:
+            rise = 18 + 6 * min(1, (self.now + at) / ITEM_FADE_MS)
+
+        screen.blit(self.items[frame], vec2(x * T - cx, int(y * T - rise) - cy))
 
     def draw_toast(self, now):
         if not self.toasts:
