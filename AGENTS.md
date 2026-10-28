@@ -19,7 +19,7 @@ Universe badge). The [README](README.md) explains how it differs from the browse
 - The README's "How it fits together" table maps the code. `data.py` and `assets/` are generated: change
   the browser game and run `node scripts/generate.mjs` (it expects a Pomerium Quest checkout at
   `../pomerium-quest`, or set `QUEST_DIR`). Never edit them by hand.
-- `data.py`, `ppl.py`, `quest.py`, `story.py` and `house.py` must run on desktop Python too, so they never
+- `data.py`, `ppl.py`, `quest.py`, `story.py`, `house.py` and `household.py` must run on desktop Python too, so they never
   touch the badge's builtins: the unit tests import them. Only `game.py`, `ui.py` and `__init__.py` draw.
 - Dialogue in `story.py` and `house.py` is ported by hand from the browser game's `story.ts` and
   `house-story.ts`. Keep it in step with them.
@@ -29,6 +29,9 @@ Universe badge). The [README](README.md) explains how it differs from the browse
   `--setup` runs Python first, with the game as `g`, to jump to any stage. Read the screenshot rather than
   guessing at layout. `tests/badge_playthrough.py` plays the whole quest this way; run it after changing
   `game.py`.
+- Anything that plays out over many frames, such as a guard leading a visitor out, is a generator the
+  game steps each frame (`Game.start`): it yields how many milliseconds to wait. That keeps the browser
+  game's async walks readable as one function.
 - MicroPython has no `dataclasses`, `typing` or `re.finditer`. Keep to plain classes, dicts and tuples.
 - Frames take about 32 ms. The map is drawn once into one big image, and each frame blits a window of it,
   so redraw a tile with `set_tile` when it changes rather than redrawing the map.

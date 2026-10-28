@@ -27,7 +27,6 @@ What else is different on the badge:
 - **Docs links are QR codes.** Open the journal's Lessons tab, pick a lesson and press Select to scan its
   Pomerium docs page with your phone.
 - **The badge has no speaker**, so the game is silent.
-- **The traveler stays put** instead of wandering to your house and eating your bread.
 
 ## Controls
 
@@ -69,6 +68,7 @@ the details, including how to start the quest over.
 | `.../ppl.py`                  | The policy evaluator, standing in for Pomerium                                     |
 | `.../quest.py`                | Quest stages and saving, with the badge playing the identity provider               |
 | `.../story.py`, `house.py`    | What everyone says, and what happens at each gate and at your door                  |
+| `.../household.py`            | Life around your house: the traveler, the bread, the guard who shows visitors out   |
 | `.../game.py`, `ui.py`        | The overworld and everything drawn over it                                          |
 | `scripts/generate.mjs`        | Regenerates the data from a Pomerium Quest checkout next to this one               |
 | `scripts/play.py`             | Plays the game on a connected badge with scripted presses and takes a screenshot   |
