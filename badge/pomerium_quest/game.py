@@ -23,6 +23,10 @@ HOUSE = data.HOUSE
 
 SAVE_PATH = "/state/pomerium_quest.json"
 
+#: Why the quest starts over from the beginning, with nothing kept: no session, no groups, no deed.
+DEFEATED = "The slimes got the better of you. Your quest starts over from the very beginning."
+LOST_SESSION = "Something went wrong and your session was lost, so your quest starts over from the very beginning."
+
 STEP_MS = 140
 WALK_FRAME_MS = 83
 SWING_MS = 180
@@ -474,12 +478,25 @@ class Journal:
 
 
 class Title:
-    def __init__(self, saved):
+    """The title screen. With a saved game, Up and Down choose between carrying on and a new game; `reason`
+    says why the quest just started over, if it did."""
+
+    def __init__(self, saved, reason=None):
         self.saved = saved
+        self.reason = reason
+        self.new_game = False
         self.full = True
 
     def handle(self, game, pressed):
-        if "select" in pressed:
+        if self.saved and ("up" in pressed or "down" in pressed):
+            self.new_game = not self.new_game
+
+        if "select" not in pressed:
+            return
+
+        if self.new_game:
+            game.close(self, game.start_over)
+        else:
             game.close(self, game.begin)
 
     def draw(self, game, now):
@@ -488,8 +505,23 @@ class Title:
         screen.blit(dog, rect(0, 0, T, T), rect(ui.WIDTH // 2 - 32, 50, 64, 64))
         ui.centred("A Pomeranian, a kingdom of gates,", 130, ui.TEXT)
         ui.centred("and a guard at every one of them.", 144, ui.TEXT)
-        ui.centred("Press Select to " + ("continue" if self.saved else "start"), 180, ui.LIME)
-        ui.centred("Home: back to the badge menu", 206, ui.MUTED)
+        if self.reason:
+            ui.paragraph(self.reason, 162, ui.SUN)
+            ui.centred("Press Select to start", 196, ui.LIME)
+        elif self.saved:
+            for index, label in enumerate(("Continue", "New game")):
+                y = 168 + index * 16
+                chosen = index == self.new_game
+
+                if chosen:
+                    screen.pen = ui.LIME
+                    screen.triangle(118, y + 1, 124, y + 5, 118, y + 9)
+
+                ui.text(label, 130, y, ui.LIME if chosen else ui.TEXT)
+        else:
+            ui.centred("Press Select to start", 180, ui.LIME)
+
+        ui.centred("Home: back to the badge menu", 218, ui.MUTED)
 
 
 #: The sky's sparks, in the game's sunset palette.
@@ -776,7 +808,8 @@ class Game:
         except OSError:
             pass
 
-    def start_over(self):
+    def start_over(self, reason=None):
+        """Forgets everything: the session and its groups, the deed, lessons, gear and the save file."""
         try:
             import os
 
@@ -789,7 +822,7 @@ class Game:
         self.queue = []
         self.toasts = []
         self.reset_world()
-        self.show(Title(False))
+        self.show(Title(False, reason))
 
     # The world
 
@@ -1258,7 +1291,7 @@ class Game:
             self.let_through(guard)
             self.walk(x, y)
         elif leaving and outcome == "signin":
-            self.respawn("Something went wrong and your session was lost, so you start again in Hearth Village.")
+            self.start_over(LOST_SESSION)
 
     def let_through(self, guard):
         gate = guard.gate
@@ -1497,6 +1530,10 @@ class Game:
             if (x, y) == (self.player.x, self.player.y) and not self.player.moving(now):
                 self.hurt(direction)
 
+                # A last bite starts the quest over, with a new world and the title screen up.
+                if self.overlay:
+                    return
+
                 continue
 
             if self.monster_can_enter(monster, x, y):
@@ -1601,7 +1638,7 @@ class Game:
         hp = self.quest.hp - HIT_DAMAGE
 
         if hp <= 0:
-            self.respawn()
+            self.start_over(DEFEATED)
 
             return
 
@@ -1611,15 +1648,6 @@ class Game:
 
         if not self.player.moving(self.now) and self.tile(x, y) in PLAYER_TERRAIN and not self.occupied(x, y):
             self.walk(x, y)
-
-    def respawn(self, message="You wake up back in Hearth Village. Your identity and gear are still yours."):
-        if self.open_gate:
-            self.close_gate()
-
-        self.shake_at = None
-        self.player = Sprite(data.SPAWN["x"], data.SPAWN["y"])
-        self.quest.set_hp(MAX_HP)
-        self.toast(message)
 
     # Drawing
 
