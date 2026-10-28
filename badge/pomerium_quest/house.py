@@ -187,7 +187,8 @@ def read_sign(g):
     public = g.quest.progress["house_rules"] is None
     text = (
         "Your door is a route left wide open with allow_public_unauthenticated_access, so Pomerium lets in every "
-        "request, signed in or not. The rules you choose at the desk replace it."
+        "request, signed in or not. In a policy, the same thing is written accept: true. The rules you choose at "
+        "the desk replace it. A route with no rules at all would let no one in."
         if public
         else "Your door is a route, and its policy is the rules you chose at the desk."
     )
@@ -199,8 +200,17 @@ def read_sign(g):
     )
 
 
-def read_table(g):
-    g.say([page("Table", "A fresh loaf of bread. The traveler keeps eyeing it.")])
+def read_table(g, left, whole):
+    """The table, by how much of the loaf is left."""
+    text = "What's left of a loaf. Someone has clearly been at it."
+
+    if left == whole:
+        text = "A fresh loaf of bread."
+
+    if left == 0:
+        text = "Crumbs. The traveler was thorough."
+
+    g.say([page("Table", text)])
 
 
 def door_refuses_you(g):
@@ -233,6 +243,7 @@ def use_desk(g):
     def chosen(index):
         label, rules = OPTIONS[letter_id][index]
         g.quest.update(house_rules=rules)
+        g.rules_saved()
         learn(g, "writePolicy")
         g.toast("Your door now has the rules: " + label, "allow")
         check_letter(g, letter_id, letter)
