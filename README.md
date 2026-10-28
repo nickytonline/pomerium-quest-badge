@@ -20,6 +20,20 @@ it:
 The policies, claims and rules the game teaches are the same ones the browser game uses, and they're true of
 open-source Pomerium. Only who evaluates them changes.
 
+## Installing on your badge
+
+Plug the badge in over USB-C, install [`mpremote`](https://docs.micropython.org/en/latest/reference/mpremote.html),
+then copy the app over and restart:
+
+```sh
+mpremote mkdir :/system/apps/pomerium_quest
+mpremote cp -r badge/pomerium_quest/. :/system/apps/pomerium_quest/
+mpremote reset
+```
+
+Pick "Pomerium Quest" from the badge's menu. [AGENTS.md](AGENTS.md) has the full steps, including finding the
+badge's port, checking free space and starting the quest over.
+
 ## License
 
 [Apache License 2.0](LICENSE), the same as Pomerium Quest.
