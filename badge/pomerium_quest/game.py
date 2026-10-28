@@ -405,10 +405,15 @@ class Title:
 
 
 def draw_qr(url):
-    code = screen.qr(url) if hasattr(screen, "qr") else None
-
-    if code is None:
-        ui.paragraph(url, 80, ui.CODE)
+    """The docs link as a QR code, on a white square so phones can read it."""
+    code = screen.qr(url)
+    scale = min(4, 150 // code.width)
+    size = code.width * scale
+    x = (ui.WIDTH - size) // 2
+    y = 34
+    screen.pen = color.rgb(255, 255, 255)
+    screen.rectangle(x - 8, y - 8, size + 16, size + 16)
+    screen.blit(code, rect(0, 0, code.width, code.height), rect(x, y, size, size))
 
 
 def goal(quest):
