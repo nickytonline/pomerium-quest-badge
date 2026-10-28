@@ -19,6 +19,7 @@ class FakeGame:
         self.toasts = []
         self.ended = None
         self.oracle_shown = False
+        self.rules_saved_count = 0
 
     def say(self, pages, then=None):
         self.pages.extend(pages)
@@ -47,6 +48,9 @@ class FakeGame:
 
     def phished(self):
         self.ended = "phished"
+
+    def rules_saved(self):
+        self.rules_saved_count += 1
 
 
 class PlaysThrough(unittest.TestCase):
