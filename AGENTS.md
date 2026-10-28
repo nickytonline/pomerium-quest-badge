@@ -99,6 +99,12 @@ Other things to know:
 - Leave every other file in `/system` and `/state` alone: they belong to the launcher and the badge's other
   apps. **`secrets.py`** holds the owner's Wi-Fi details, and the game doesn't need Wi-Fi, so never read,
   print or copy it.
+- **Every `mpremote` command interrupts whatever the badge is running** and leaves it at the REPL, so its
+  screen goes dark. When you're done with it, `mpremote connect <port> exec "import machine; machine.reset()"`
+  restarts it into the launcher.
+- **If the install can't get the drive to appear**, launch the badge's own Mass Storage app:
+  `mpremote connect <port> exec "launch('/system/apps/mass_storage')"`, wait for the drive, then run the
+  install again (it skips the switch when the drive is already mounted).
 - You can't press the badge's buttons, so ask the owner to check anything played or visual.
 
 ## Commits
