@@ -16,50 +16,68 @@ Universe badge). The [README](README.md) explains how it differs from the browse
 
 ## The badge
 
-- MicroPython 1.29 on an RP2350, 320x240 in `HIRES` mode, about 8 MB of RAM and about 1 MB of free flash.
-  Flash is the tight budget, so keep sprite sheets small.
-- Apps live in `/system/apps/<name>/` with an `__init__.py` that calls `run(update)`. Save state under
-  `/state/`.
-- The badge firmware provides `badge`, `screen`, `image`, `color`, `font`, `shape`, `run` and the
-  `BUTTON_*` constants as builtins, so apps don't import them.
+- MicroPython 1.29 on an RP2350, 320x240 in `HIRES` mode and about 8 MB of RAM.
+- The badge has two filesystems:
+  - `/system` is a 12 MB FAT drive holding the launcher and every app, with about 9 MB free. MicroPython
+    mounts it **read-only**, so only a computer can write it, while the badge is in USB disk mode. On the
+    drive, `apps/` is `/system/apps/`.
+  - `/` is a small, writable littlefs (about 1 MB free) that holds `/state/`. Apps save there.
+- Apps live in `/system/apps/<name>/` with an `__init__.py` that calls `run(update)`. This game saves to
+  `/state/pomerium_quest.json`.
+- The firmware provides `badge`, `screen`, `image`, `color`, `font`, `shape`, `run` and the `BUTTON_*`
+  constants as builtins, so apps don't import them.
+- The physical buttons are `BUTTON_UP`, `BUTTON_DOWN`, `BUTTON_LEFT`, `BUTTON_RIGHT`, `BUTTON_SELECT`,
+  `BUTTON_BACK`, `BUTTON_MENU` and `BUTTON_HOME`. Home leaves the app for the launcher, so the game never
+  uses it. The README's controls table is the mapping: change it, the in-game hints and the code together.
 
 ## Setting up the badge
 
-The game installs as one app folder, `/system/apps/pomerium_quest/`. The launcher menu lists every folder in
-`/system/apps/` that has an `__init__.py` and titles it from the folder name, so `pomerium_quest` shows up
-as "Pomerium Quest". There's nothing else to register.
+`./scripts/install.sh` does the whole install. Run it, and only fall back to the manual steps below if it
+fails. It needs macOS or Linux, Python 3 and `mpremote` (`pipx install mpremote`).
 
-1. **Install `mpremote`** if it's missing: `pipx install mpremote` (or `pip install --user mpremote`).
-2. **Find the badge.** Plug it in over USB-C with a data cable. On macOS it appears as
-   `/dev/cu.usbmodem*`; on Linux as `/dev/ttyACM*`. To confirm it's the badge, run
-   `ioreg -p IOUSB -l -w0 | grep -i badger` (macOS) or `lsusb | grep -i pimoroni` (Linux). It reports as
-   "GitHub Badger 2350 MicroPython" from Pimoroni. If no port appears, the badge may be asleep: press any
-   button to wake it.
-3. **Check it responds**:
-   `mpremote connect <port> exec "import sys; print(sys.implementation)"`. Connecting interrupts whatever
-   app is running, which is expected.
-4. **Check there's room**: `mpremote connect <port> exec "import os; s=os.statvfs('/'); print(s[0]*s[3])"`
-   prints the free bytes. The app must fit with some to spare.
-5. **Copy the app** from the repo's `badge/pomerium_quest/` folder:
-   `mpremote connect <port> mkdir :/system/apps/pomerium_quest` (ignore "file exists"), then
-   `mpremote connect <port> cp -r badge/pomerium_quest/. :/system/apps/pomerium_quest/`.
-   Use `mpremote`, not Finder: copying through the badge's USB disk mode leaves macOS `._*` files behind.
-6. **Restart into the menu**: `mpremote connect <port> reset`. Pick "Pomerium Quest" with the d-pad and
-   press Select.
+The launcher lists every folder in `/system/apps/` that has an `__init__.py`, titled from the folder name
+(`pomerium_quest` shows as "Pomerium Quest"), and orders them by the `APP_ORDER` tuple in
+`/system/apps/menu/app.py`. Pomerium Quest goes **second** in that tuple, after whatever is first (today
+that's the owner's `zero_trust` app). That edit to the launcher is the only change made outside the game's
+own folder.
 
-To run the game straight away while developing, without going through the menu, use
-`mpremote connect <port> exec "launch('/system/apps/pomerium_quest')"`. Errors print to the terminal.
+What the script does, step by step:
+
+1. **Find the badge.** Plugged in over USB-C, it shows up as a serial port: `/dev/cu.usbmodem*` on macOS,
+   `/dev/ttyACM*` on Linux. To confirm it's the badge, run `ioreg -p IOUSB -l -w0 | grep -i badger` (macOS)
+   or `lsusb | grep -i pimoroni` (Linux): it reports as "GitHub Badger 2350 MicroPython" from Pimoroni. If
+   no port appears, press a button to wake it.
+2. **Switch to USB disk mode**:
+   `mpremote connect <port> exec "import powman; powman.reset_into_msc()"`. This is what the badge's Mass
+   Storage app does. The badge reboots and mounts as a drive named `BADGER` (`/Volumes/BADGER` on macOS).
+   Set `BADGE_DRIVE` if it mounts elsewhere. Never `import _msc` to get there: it switches modes
+   mid-command and leaves `mpremote` hanging.
+3. **Copy the app**: `cp -RX badge/pomerium_quest <drive>/apps/`. The `-X` matters on macOS: without it,
+   copies leave `._*` files on the FAT drive, which then show up on the badge.
+4. **Back up the launcher once**: copy `<drive>/apps/menu/app.py` to `.badge-backup/menu-app.py` in this
+   repo (git ignores it). To undo the menu change, copy that file back onto the drive.
+5. **Put the game second**: insert `    "pomerium_quest",` as the second line inside `APP_ORDER = (`,
+   removing any copy already there, so running the install twice is safe.
+6. **Eject**: delete any `._*` files under `<drive>/apps/pomerium_quest`, `sync`, then `diskutil eject <drive>` (macOS) or
+   `umount <drive>` (Linux). The badge restarts into the launcher; if it doesn't, ask the owner to press
+   its reset button.
+7. **Check it**: once the serial port is back,
+   `mpremote connect <port> exec "import os; print(os.listdir('/system/apps/pomerium_quest'))"` should
+   list the app's files.
 
 Other things to know:
 
-- **Saves** live in `/state/pomerium_quest.json`. Delete it with `mpremote connect <port> rm
-  :/state/pomerium_quest.json` to start the quest over. Never touch other files in `/state/` or `/system/`
-  outside the app's own folder: they belong to the badge's other apps and its launcher.
-- **Removing the app**: `mpremote connect <port> rm -r :/system/apps/pomerium_quest`.
-- **USB disk mode** (the Mass Storage app, or double-tapping reset) mounts the badge as a drive instead of a
-  serial port. `mpremote` can't connect while it's in that mode; reset the badge to leave it.
-- **`secrets.py`** on the badge holds the owner's Wi-Fi details. The game doesn't need Wi-Fi, so never read,
+- **Running it without the menu**, while developing:
+  `mpremote connect <port> exec "launch('/system/apps/pomerium_quest')"`. Errors print to the terminal.
+- **Starting the quest over**: `mpremote connect <port> rm :/state/pomerium_quest.json`. That works over
+  serial because `/state` is writable.
+- **Removing the game**: in disk mode, delete `<drive>/apps/pomerium_quest` and remove its line from
+  `APP_ORDER` (or copy the backup back).
+- **A firmware update** may replace the launcher and drop the game from `APP_ORDER`. Run the install again.
+- Leave every other file in `/system` and `/state` alone: they belong to the launcher and the badge's other
+  apps. **`secrets.py`** holds the owner's Wi-Fi details, and the game doesn't need Wi-Fi, so never read,
   print or copy it.
+- You can't press the badge's buttons, so ask the owner to check anything played or visual.
 
 ## Commits
 
