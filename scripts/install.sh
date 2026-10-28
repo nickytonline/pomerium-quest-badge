@@ -33,10 +33,10 @@ fi
 
 echo "Copying the app to $drive/apps/pomerium_quest"
 rm -rf "$drive/apps/pomerium_quest"
-# Only the game's code and sprite sheets: not Python's caches from running the tests here. -X leaves out
+# Only the game's code, icon and sprite sheets: not Python's caches from running the tests here. -X leaves out
 # extended attributes, which macOS would otherwise write as ._* files on the FAT drive.
 mkdir -p "$drive/apps/pomerium_quest/assets"
-cp -X badge/pomerium_quest/*.py "$drive/apps/pomerium_quest/"
+cp -X badge/pomerium_quest/*.py badge/pomerium_quest/icon.png "$drive/apps/pomerium_quest/"
 cp -X badge/pomerium_quest/assets/*.png "$drive/apps/pomerium_quest/assets/"
 
 # The launcher orders apps by its APP_ORDER list. Keep the untouched original on this computer.
