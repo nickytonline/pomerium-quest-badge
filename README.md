@@ -4,6 +4,8 @@ A pocket-sized port of [Pomerium Quest](https://github.com/nickytonline/pomerium
 Universe badge (Pimoroni Badger 2350, MicroPython). You play the Pomerium Pomeranian, every gate in the
 kingdom has a Pomerium policy, and when a guard turns you away the game shows you the exact rule that failed.
 
+<img src="docs/pond-shake.gif?v=2" alt="The dog fights a bot slime from the pond, climbs out and shakes the water off">
+
 ## How this differs from the browser game
 
 The browser game runs a real Pomerium in Kubernetes with Keycloak as the identity provider, so every gate is
