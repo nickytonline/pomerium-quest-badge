@@ -938,6 +938,7 @@ class Game:
         self.player = Sprite(pos[0], pos[1])
         self.dir = quest.progress["dir"] or "down"
         self.swing_at = -10000
+        self.bumping = False
         self.hurt_at = -10000
         self.npcs = [Sprite(npc["x"], npc["y"], data.NPC_FRAME[npc["npcId"]]) for npc in data.NPCS]
 
@@ -1246,15 +1247,13 @@ class Game:
 
             return
 
+        if not any(direction in held for direction in DIRS):
+            self.bumping = False
+
         if self.player.moving(now):
             return
 
         if "select" in pressed:
-            self.interact()
-
-            return
-
-        if "back" in pressed:
             self.swing()
 
             return
@@ -1270,6 +1269,8 @@ class Game:
         x, y = self.front()
 
         if self.find(self.npcs, x, y) or self.find(self.phish, x, y):
+            self.bump()
+
             return
 
         guard = self.household.guard
@@ -1280,6 +1281,8 @@ class Game:
         oracle = self.visiting_oracle
 
         if oracle and (oracle.x, oracle.y) == (x, y):
+            self.bump()
+
             return
 
         guard = next((g for g in self.guards if (g.x, g.y) == (x, y)), None)
@@ -1338,6 +1341,16 @@ class Game:
 
         if tile in PLAYER_TERRAIN or tile in (TILE["gateOpen"], TILE["doorClosed"]):
             self.walk(x, y)
+        else:
+            self.bump()
+
+    def bump(self):
+        """Walking into a sign, a person or a chest uses it. Once per press, so holding the key doesn't reopen it."""
+        if self.bumping:
+            return
+
+        self.bumping = True
+        self.interact()
 
     def hint(self, text):
         if not self.toasts:

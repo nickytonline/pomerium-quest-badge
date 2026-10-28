@@ -40,6 +40,12 @@ def walk(direction, steps):
         frames(6, (direction,), (direction,))
 
 
+def talk(x, y, facing):
+    """Stands at (x, y) facing a sign, person or chest, then walks into it to talk or use it."""
+    at(x, y, facing)
+    walk(facing, 1)
+
+
 def check(label, ok):
     print(("PASS " if ok else "FAIL ") + label)
 
@@ -48,18 +54,14 @@ g.close(g.overlay)
 finish_dialogs()
 
 # Sign in with the Oracle, become a citizen.
-at(12, 26, "up")
-press("select")
+talk(12, 26, "up")
 finish_dialogs()
-at(4, 21, "up")
-press("select")
+talk(4, 21, "up")
 finish_dialogs()
 check("signed in as a newcomer", g.quest.stage == "newcomer")
-at(12, 26, "up")
-press("select")
+talk(12, 26, "up")
 finish_dialogs()
-at(4, 21, "up")
-press("select")
+talk(4, 21, "up")
 finish_dialogs()
 check("a citizen with a deed", g.quest.stage == "citizen" and g.quest.session["deed"] == "house-1")
 
@@ -75,9 +77,8 @@ at(8, 12, "left")
 walk("left", 2)
 finish_dialogs()
 check("inside the house", gm.in_house(g.player.x, g.player.y))
-at(3, 10, "left")
+talk(3, 10, "left")
 g.pick_choice = 0
-press("select")
 
 for _ in range(10):
     if isinstance(g.overlay, gm.Picker):
@@ -87,29 +88,27 @@ for _ in range(10):
 
 check("first letter solved", g.quest.progress["letter"] == 1)
 
-# Slimes: three for the Captain.
+# Slimes: three for the Captain. Select swings the sword.
 for monster in list(g.monsters)[:3]:
     monster.hp = 1
     at(monster.x - 1, monster.y, "right")
-    press("back")
+    press("select")
 
 finish_dialogs()
 check("three slimes defeated", g.quest.defeated >= 3 and g.quest.stage == "proven")
 
 # The Captain knights the player, and the Oracle arrives to sign them in again.
-at(21, 5, "up")
-press("select")
+talk(21, 5, "up")
 finish_dialogs()
 check("a knight", g.quest.stage == "knight")
 check("the Oracle went home", g.visiting_oracle is None)
 
 # The chest in the armory, then the rocks.
-at(33, 5, "up")
-press("select")
+talk(33, 5, "up")
 finish_dialogs()
 check("holding the steel sword", g.quest.has_steel())
 at(27, 16, "down")
-press("back")
+press("select")
 check("the rock split", g.tile(27, 17) == gm.TILE["cobble"])
 
 # Through the library gate, every book, the Librarian.
@@ -119,12 +118,10 @@ finish_dialogs()
 check("inside the library", g.player.y > 20)
 
 for shelf in (30, 31, 32):
-    at(shelf, 23, "up")
-    press("select")
+    talk(shelf, 23, "up")
     finish_dialogs()
 
-at(34, 26, "up")
-press("select")
+talk(34, 26, "up")
 finish_dialogs()
 check("a scholar in session", "scholars" in g.quest.session["groups"])
 

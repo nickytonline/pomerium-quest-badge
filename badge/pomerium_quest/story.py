@@ -1004,8 +1004,8 @@ def read_workbench(g):
 INTRO = [
     page(
         "Pomerium Quest",
-        "Move with Up, Down, Left and Right. Press Select to talk, read and open. Press Back to swing your sword, "
-        "or to close what's on screen. Press Menu for your journal.",
+        "Move with Up, Down, Left and Right. Walk into a sign, a person or a chest to read, talk or open it. "
+        "Press Select to swing your sword, and Select again to go on through a talk. Press Menu for your journal.",
     ),
     page("Pomerium Quest", "The sage in the house to your right has been waiting for you. Go say hello."),
 ]

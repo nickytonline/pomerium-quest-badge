@@ -39,9 +39,9 @@ The game is played with the badge's own buttons, mapped to match the browser gam
 | Action                                         | On the badge             | In the browser game                       |
 | ---------------------------------------------- | ------------------------ | ----------------------------------------- |
 | Move                                           | Up, Down, Left and Right | The arrow keys, or the W, A, S and D keys |
-| Talk, read a sign, open a chest or knock       | Select                   | E or Enter                                |
+| Talk, read a sign, open a chest or knock       | Walk into it             | E or Enter                                |
 | Go on to the next page of a sign or a talk     | Select or Back           | E or Enter                                |
-| Swing your sword                               | Back                     | Space or J                                |
+| Swing your sword                               | Select                   | Space or J                                |
 | Close a denial screen or the journal           | Back                     | Esc                                       |
 | Pick an answer, or compare door rules          | Up and Down, Left and Right, then Select | Click                  |
 | Open the journal (your quest, your claims, lessons, the access log, start over) | Menu | I                     |
