@@ -65,8 +65,10 @@ if updated != src:
 print('Menu order starts:', ', '.join(line.strip(' ",') for line in order[:3]))
 PY
 
-# Clear any ._* files macOS left in the game's folder, then make sure everything is written before ejecting.
+# Clear any ._* files macOS left in and beside the game's folder, then make sure everything is written before
+# ejecting.
 find "$drive/apps/pomerium_quest" -name '._*' -delete
+rm -f "$drive/apps/._pomerium_quest"
 sync
 
 if command -v diskutil >/dev/null; then
