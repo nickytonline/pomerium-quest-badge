@@ -11,7 +11,7 @@ import house
 import household
 import story
 import ui
-from quest import MAX_HP, Quest
+from quest import MAX_HP, NAME_MAX, Quest
 
 TILE = data.TILE
 T = data.TILE_PX
@@ -477,6 +477,96 @@ class Journal:
             ui.text("Left/Right: tabs   Back or Menu: close", ui.PAD + 4, ui.HEIGHT - 20, ui.MUTED)
 
 
+def badge_owner():
+    """The name and GitHub username saved in the badge's Settings. They live in secrets.py beside the Wi-Fi
+    details, so this reads those two keys and nothing else, the way the badge's own app does."""
+    try:
+        import secrets
+    except ImportError:
+        return "", ""
+
+    def setting(key):
+        return str(getattr(secrets, key, "") or "").strip()
+
+    return setting("CONTACT_NAME"), setting("GITHUB_USERNAME")
+
+
+#: The name screen's keyboard, row by row: letters, a space, a hyphen and an apostrophe, then delete and done.
+NAME_ROWS = (tuple("ABCDEFGH"), tuple("IJKLMNOP"), tuple("QRSTUVWX"), tuple("YZ -'"), ("Delete", "Done"))
+NAME_CELL = 32
+
+
+class NameEntry:
+    """Asks the player's first name when the badge's Settings have none: move over the keys with the d-pad,
+    Select types one, Back deletes one."""
+
+    def __init__(self, then):
+        self.then = then
+        self.name = ""
+        self.row = 0
+        self.column = 0
+        self.full = True
+
+    def handle(self, game, pressed):
+        if "up" in pressed:
+            self.row = (self.row - 1) % len(NAME_ROWS)
+        if "down" in pressed:
+            self.row = (self.row + 1) % len(NAME_ROWS)
+
+        keys = NAME_ROWS[self.row]
+
+        if "left" in pressed:
+            self.column -= 1
+        if "right" in pressed:
+            self.column += 1
+
+        self.column = min(self.column, len(keys) - 1) % len(keys)
+
+        if "back" in pressed:
+            self.name = self.name[:-1]
+
+        if "select" not in pressed:
+            return
+
+        key = keys[self.column]
+
+        if key == "Delete":
+            self.name = self.name[:-1]
+        elif key == "Done":
+            if self.name.strip():
+                game.quest.set_player(self.name)
+                game.close(self, self.then)
+        elif len(self.name) < NAME_MAX:
+            # Capitals start each word; the rest are lower case.
+            self.name += key if not self.name or self.name[-1] in " -" else key.lower()
+
+    def draw(self, game, now):
+        ui.panel("Who are you?")
+        ui.centred("The Oracle will want to know your first name.", 36, ui.MUTED)
+        ui.box(60, 54, ui.WIDTH - 120, 24)
+        cursor = "_" if (now // 400) % 2 else " "
+        ui.centred(self.name + cursor, 60, ui.LIME)
+        left = (ui.WIDTH - 8 * NAME_CELL) // 2
+
+        for row, keys in enumerate(NAME_ROWS):
+            # Delete and Done are words, so they get four cells each.
+            width = NAME_CELL * 4 if len(keys[0]) > 1 else NAME_CELL
+            y = 90 + row * 22
+
+            for column, key in enumerate(keys):
+                x = left + column * width
+                chosen = (row, column) == (self.row, self.column)
+
+                if chosen:
+                    screen.pen = ui.SUN
+                    screen.rectangle(x + 2, y - 3, width - 4, 18)
+
+                label = "Spc" if key == " " else key
+                ui.text(label, x + (width - 6 * len(label)) // 2, y, ui.NIGHT if chosen else ui.TEXT)
+
+        ui.centred("D-pad: move   Select: type   Back: delete", ui.HEIGHT - 20, ui.MUTED)
+
+
 class Title:
     """The title screen. With a saved game, Up and Down choose between carrying on and a new game; `reason`
     says why the quest just started over, if it did."""
@@ -782,6 +872,10 @@ class Game:
         self.saved_at = 0
         self.now = 0
         self.quest = Quest.from_save(self.load())
+        name, handle = badge_owner()
+
+        if name or handle:
+            self.quest.set_player(name or handle, handle)
         saved = self.quest.progress["pos"] is not None
         self.reset_world()
         self.show(Title(saved))
@@ -817,7 +911,10 @@ class Game:
         except OSError:
             pass
 
+        # Starting over forgets the quest, not who the player is.
+        player = (self.quest.name, self.quest.handle)
         self.quest = Quest()
+        self.quest.set_player(*player)
         self.overlay = None
         self.queue = []
         self.toasts = []
@@ -1097,6 +1194,11 @@ class Game:
         self.bits.append(Bit(self.now, random.randint(240, 320), x, y, dx, fall, lift, shape, linger, 5, True))
 
     def begin(self):
+        if not self.quest.name:
+            self.show(NameEntry(self.begin))
+
+            return
+
         if self.quest.progress["pos"] is None:
             self.quest.update(pos=[self.player.x, self.player.y])
             self.say(story.INTRO)
