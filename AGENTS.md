@@ -16,7 +16,7 @@ Universe badge). The [README](README.md) explains how it differs from the browse
 
 ## Working on the game
 
-- The README's "How it fits together" table maps the code. `data.py` and `assets/` are generated: change
+- The README's "How it fits together" table maps the code. `data.py`, `assets/` and `icon.png` are generated: change
   the browser game and run `node scripts/generate.mjs` (it expects a Pomerium Quest checkout at
   `../pomerium-quest`, or set `QUEST_DIR`). Never edit them by hand.
 - `data.py`, `ppl.py`, `quest.py`, `story.py`, `house.py` and `household.py` must run on desktop Python too, so they never

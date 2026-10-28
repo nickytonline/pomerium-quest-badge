@@ -3,8 +3,9 @@
 // the Python tests check the badge's port against.
 //
 // Run: node scripts/generate.mjs   (QUEST_DIR points at a Pomerium Quest checkout; default ../pomerium-quest)
-import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { deflateSync, inflateSync } from 'node:zlib'
 
 const root = resolve(import.meta.dirname, '..')
 const quest = resolve(process.env.QUEST_DIR ?? join(root, '..', 'pomerium-quest'))
@@ -118,6 +119,94 @@ mkdirSync(join(app, 'assets'), { recursive: true })
 
 for (const sheet of ['dog.png', 'items.png', 'npcs.png', 'tiles.png'])
   copyFileSync(join(quest, 'app', 'public', 'assets', sheet), join(app, 'assets', sheet))
+
+/** The launcher's icon: the dog's first frame, facing down, scaled up whole pixels to ICON_PX square. */
+const ICON_PX = 48
+const TILE_PX = 16
+
+/** Reads a PNG as the browser game's art writes them: 8-bit RGBA, every row unfiltered. */
+function readPng(file) {
+  const bytes = readFileSync(file)
+  const idat = []
+  let width = 0
+  let height = 0
+
+  for (let at = 8; at < bytes.length; ) {
+    const length = bytes.readUInt32BE(at)
+    const type = bytes.toString('ascii', at + 4, at + 8)
+    const body = bytes.subarray(at + 8, at + 8 + length)
+
+    if (type === 'IHDR') {
+      width = body.readUInt32BE(0)
+      height = body.readUInt32BE(4)
+
+      if (body[8] !== 8 || body[9] !== 6) throw new Error(`${file} isn't 8-bit RGBA`)
+    }
+
+    if (type === 'IDAT') idat.push(body)
+    at += 12 + length
+  }
+
+  const raw = inflateSync(Buffer.concat(idat))
+  const rgba = Buffer.alloc(width * height * 4)
+
+  for (let y = 0; y < height; y++) {
+    const row = y * (width * 4 + 1)
+
+    if (raw[row] !== 0) throw new Error(`${file} row ${y} is filtered`)
+    raw.copy(rgba, y * width * 4, row + 1, row + 1 + width * 4)
+  }
+
+  return { width, rgba }
+}
+
+function crc32(bytes) {
+  let crc = ~0
+
+  for (const byte of bytes) {
+    crc ^= byte
+
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
+  }
+
+  return ~crc >>> 0
+}
+
+function chunk(type, body) {
+  const head = Buffer.alloc(8)
+  head.writeUInt32BE(body.length, 0)
+  head.write(type, 4, 'ascii')
+  const crc = Buffer.alloc(4)
+  crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), body])))
+
+  return Buffer.concat([head, body, crc])
+}
+
+function writePng(file, size, rgba) {
+  const raw = Buffer.alloc((size * 4 + 1) * size)
+
+  for (let y = 0; y < size; y++) rgba.copy(raw, y * (size * 4 + 1) + 1, y * size * 4, (y + 1) * size * 4)
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(size, 0)
+  ihdr.writeUInt32BE(size, 4)
+  ihdr.set([8, 6, 0, 0, 0], 8)
+  const parts = [chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]
+
+  writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), ...parts]))
+}
+
+const dog = readPng(join(app, 'assets', 'dog.png'))
+const scale = ICON_PX / TILE_PX
+const icon = Buffer.alloc(ICON_PX * ICON_PX * 4)
+
+for (let y = 0; y < ICON_PX; y++)
+  for (let x = 0; x < ICON_PX; x++) {
+    const from = (Math.floor(y / scale) * dog.width + Math.floor(x / scale)) * 4
+    dog.rgba.copy(icon, (y * ICON_PX + x) * 4, from, from + 4)
+  }
+
+// The launcher looks for icon.png beside the app's __init__.py.
+writePng(join(app, 'icon.png'), ICON_PX, icon)
 
 // Every zone asked by a range of identities and both methods, decided by the browser game's evaluator.
 const identities = [

@@ -69,7 +69,7 @@ the details, including how to start the quest over.
 | Path                          | What it is                                                                         |
 | ----------------------------- | ---------------------------------------------------------------------------------- |
 | `badge/pomerium_quest/`       | The app the badge runs                                                             |
-| `.../data.py` and `assets/`   | Generated from Pomerium Quest: zones, signs, books, letters, the map, sprite sheets |
+| `.../data.py`, `assets/`, `icon.png` | Generated from Pomerium Quest: zones, signs, books, letters, the map, sprite sheets, and the launcher icon (the dog) |
 | `.../ppl.py`                  | The policy evaluator, standing in for Pomerium                                     |
 | `.../quest.py`                | Quest stages and saving, with the badge playing the identity provider               |
 | `.../story.py`, `house.py`    | What everyone says, and what happens at each gate and at your door                  |
